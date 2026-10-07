@@ -62,7 +62,10 @@ function updateStitches(seconds){const whole=Math.floor(seconds);for(let t=Math.
 function timeAngles(ms){const d=new Date(ms),sec=d.getSeconds()+d.getMilliseconds()/1000,m=d.getMinutes()+sec/60,h=d.getHours()%12+m/60;return[-m*tau/60,-h*tau/12,-sec*tau/60]}
 const pointer=new THREE.Vector2(),reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 host.addEventListener('pointermove',e=>{if(!reduce)pointer.set(e.clientX/innerWidth-.5,e.clientY/innerHeight-.5)});host.addEventListener('pointerleave',()=>pointer.set(0,0));window.addEventListener('blur',()=>pointer.set(0,0));
-function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,vertical=aspect<1?4.65/aspect:4.55;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(host);resize();
+// Fit the complete felt boundary, including its edge fibers, with 10px clearance.
+feltGeometry.computeBoundingSphere();
+const framingDiameter=2*(feltGeometry.boundingSphere.radius+.016);
+function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,available=Math.max(1,Math.min(w-20,h-20)),vertical=framingDiameter*h/available;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(host);resize();
 // Audio is silent until an explicit first touch/click unlocks Web Audio.
 let audioContext,noiseBuffer,audioEnabled=false;
 async function enableAudio(){try{if(!audioContext){audioContext=new (window.AudioContext||window.webkitAudioContext)();noiseBuffer=audioContext.createBuffer(1,Math.ceil(audioContext.sampleRate*.04),audioContext.sampleRate);const data=noiseBuffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.exp(-i/(audioContext.sampleRate*.006));}await audioContext.resume();audioEnabled=audioContext.state==='running';}catch{audioEnabled=false}}
