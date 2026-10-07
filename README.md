@@ -32,3 +32,27 @@ Open the local URL printed by the server. No build step is required.
 https://tailors-time-atelier.cl7578.chatgpt.site
 
 The Sites deployment currently requires owner access.
+
+## Deploy on Vercel
+
+This repository is intentionally a static site, not a Vite/React build project.
+The files in `dist/` are the committed application source and production assets;
+there is no `package.json`, dependency installation, or compilation step.
+Three.js is bundled locally in `dist/vendor/`.
+
+Import this repository and deploy `main` with the repository root (`.`) as the
+Root Directory. The root `vercel.json` explicitly configures:
+
+- Framework Preset: Other (`null`).
+- Install Command: empty (skip).
+- Build Command: empty (skip).
+- Output Directory: `dist`.
+
+Vercel serves `dist/index.html` at `/`, with its relative CSS and ES-module imports
+resolving from the same output directory. No SPA fallback or rewrites are needed;
+this site has no client-side routes. Keep `dist/` tracked in Git.
+
+Without this configuration, Vercel's static-site default serves the repository
+root. Since that directory has no `index.html`, `/` returns 404 even though
+`/dist/index.html` exists. The `.openai/hosting.json` configuration is for Sites
+and does not configure Vercel. No DNS or custom-domain changes are required.
