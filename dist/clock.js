@@ -3,6 +3,7 @@ import {createTapeModel} from './tape-system.js';
 import {tickAngle,stitchAddress} from './mechanics.js';
 import {addMaterialDetails,THREAD_COLOR} from './material-details.js';
 import {addTemporalBehavior} from './temporal-behavior.js';
+import {addMaterialResponse} from './material-response.js';
 const host=document.querySelector('#scene');
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0,0);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;host.appendChild(renderer.domElement);
@@ -20,7 +21,7 @@ const inkTexture=canvasTexture(1024,1024,(c,w,h)=>{c.fillStyle='#c83d25';c.fillR
 const feltMaterial=new THREE.MeshStandardMaterial({map:inkTexture,roughness:1,metalness:0,color:0xf3dfca});
 const feltGeometry=new THREE.SphereGeometry(R,160,80),fp=feltGeometry.attributes.position;
 for(let i=0;i<fp.count;i++){const x=fp.getX(i),y=fp.getY(i),a=Math.atan2(y,x),ripple=1+.0015*Math.sin(a*19)+.001*Math.sin(a*31);fp.setXYZ(i,x*ripple,y*ripple,fp.getZ(i)*.082)}feltGeometry.computeVertexNormals();mesh(feltGeometry,feltMaterial);
-const fibers=[];for(let i=0;i<9500;i++){const a=rand()*tau,r=R*Math.sqrt(rand()),x=Math.sin(a)*r,y=Math.cos(a)*r,z=surface(x,y)+.003,b=rand()*tau,l=.003+rand()*.012;fibers.push(x,y,z,x+Math.sin(b)*l,y+Math.cos(b)*l,z+.001)}const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.Float32BufferAttribute(fibers,3));assembly.add(new THREE.LineSegments(fg,new THREE.LineBasicMaterial({color:0xec7750,transparent:true,opacity:.13})));
+const fibers=[];for(let i=0;i<9500;i++){const a=rand()*tau,r=R*Math.sqrt(rand()),x=Math.sin(a)*r,y=Math.cos(a)*r,z=surface(x,y)+.003,b=rand()*tau,l=.003+rand()*.012;fibers.push(x,y,z,x+Math.sin(b)*l,y+Math.cos(b)*l,z+.001)}const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.Float32BufferAttribute(fibers,3));const fiberMaterial=new THREE.LineBasicMaterial({color:0xec7750,transparent:true,opacity:.13});assembly.add(new THREE.LineSegments(fg,fiberMaterial));
 // Flexible, double-sided cloth; all 60 marks are measured along its centerline.
 const tapeModel=createTapeModel(surface),tapePoint=tapeModel.point;
 function clothTexture(back){return canvasTexture(4096,128,(c,w,h)=>{c.fillStyle=back?'#a74931':'#d2c5a5';c.fillRect(0,0,w,h);for(let x=0;x<w;x+=3){c.fillStyle=x%6?'rgba(45,30,18,.08)':'rgba(255,222,182,.13)';c.fillRect(x,0,1,h)}for(let y=0;y<h;y+=3){c.fillStyle='rgba(65,40,23,.065)';c.fillRect(0,y,w,1)}for(let i=0;i<60;i++){c.fillStyle=back?'#e4ba88':i%15===0?'#37382d':'#554c3d';c.fillRect(i*w/60,6,i%15===0?5:i%5===0?3.5:2,i%15===0?91:i%5===0?73:i%2?32:45)}for(let i=0;i<18000;i++){c.fillStyle=back?'rgba(144,63,39,.18)':'rgba(198,166,125,.20)';c.fillRect(rand()*w,rand()*h,1+rand()*3,1)}})}
@@ -79,11 +80,12 @@ function playTick(volume=1){if(!audioEnabled||audioContext.state!=='running'||do
 function playSnip(){if(!audioEnabled||audioContext.state!=='running'||document.hidden)return;const t=audioContext.currentTime;for(const [delay,frequency,volume]of[[0,1150,.03],[.021,2600,.017]]){const source=audioContext.createBufferSource(),filter=audioContext.createBiquadFilter(),gain=audioContext.createGain();source.buffer=noiseBuffer;filter.type='highpass';filter.frequency.value=frequency;gain.gain.setValueAtTime(volume,t+delay);gain.gain.exponentialRampToValueAtTime(.0001,t+delay+.031);source.connect(filter).connect(gain).connect(audioContext.destination);source.start(t+delay);source.stop(t+delay+.038);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect()}}}
 const materialDetails=addMaterialDetails(assembly,surface,R,tickAngle(Math.floor(Date.now()/1000),80));
 const temporal=addTemporalBehavior({tapeGeometries,pins,minute,hour,needle,materialDetails,playContact:playTick,playSnip});
+const materialResponse=addMaterialResponse({host,camera,assembly,R,feltMaterial,fiberMaterial,tapeGeometries,steelMaterial:dark,scissors:[minute.group,hour.group],tapeModel,materialDetails});
 let activated=false;
 let prev=performance.now(),tickSecond=Math.floor(Date.now()/1000),tickStart=-Infinity;
 document.addEventListener('visibilitychange',()=>{if(document.hidden){audioContext?.suspend();temporal.skipCut();}else{tickSecond=Math.floor(Date.now()/1000);tickStart=-Infinity;if(audioEnabled)audioContext?.resume().catch(()=>{});}});
 function animate(now){requestAnimationFrame(animate);if(document.hidden){prev=now;return}const dt=Math.min((now-prev)/1000,.04);prev=now;const ms=Date.now(),second=Math.floor(ms/1000),a=timeAngles(ms);
- const running=temporal.update(dt,a);
+ const running=temporal.update(dt,a);materialResponse.update(dt,now,running);
  if(running){if(!activated){activated=true;tickSecond=second;tickStart=-Infinity;lastSecond=Math.floor(ms/60000)*60;}
  const adjacent=second===tickSecond+1,changed=second!==tickSecond;if(changed){tickSecond=second;tickStart=adjacent?now:-Infinity;if(adjacent&&second%60!==0)playTick();}
  const elapsed=now-tickStart;needle.rotation.z=tickAngle(tickSecond,elapsed);needle.position.z=.72;materialDetails.update(needle.rotation.z,dt);updateStitches(ms/1000);

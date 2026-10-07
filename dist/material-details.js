@@ -9,6 +9,8 @@ export function advanceThread(state,target,dt){
 }
 export function addMaterialDetails(assembly,surface,R,initialAngle){
  const motion={angle:initialAngle,velocity:0};
+ const touch={point:null,direction:new THREE.Vector2(1,0),strength:0};
+ const deflections=Array.from({length:7},()=>({x:0,y:0,vx:0,vy:0}));
  const controls=Array.from({length:7},()=>new THREE.Vector3());
  const curve=new THREE.CatmullRomCurve3(controls,false,'centripetal');
  const lengths=[.065,.095,.24,.55,1.0,1.43,1.68],offsets=[.018,0,-.045,-.09,-.075,-.045,.018];
@@ -19,6 +21,8 @@ export function addMaterialDetails(assembly,surface,R,initialAngle){
  const thread=new THREE.Mesh(geometry,material);thread.renderOrder=23;thread.frustumCulled=false;assembly.add(thread);
  function update(needleAngle,dt){advanceThread(motion,needleAngle,dt);const lag=Math.atan2(Math.sin(motion.angle-needleAngle),Math.cos(motion.angle-needleAngle));
   for(let i=0;i<controls.length;i++){const softness=Math.max(0,(i-1)/(controls.length-2)),a=needleAngle+lag*softness,x=offsets[i],y=lengths[i];controls[i].set(x*Math.cos(a)-y*Math.sin(a),x*Math.sin(a)+y*Math.cos(a),i===1?.715:.742+Math.sin(softness*Math.PI)*.012)}
+  const undisturbed=controls.map(p=>p.clone());
+  for(let i=2;i<controls.length;i++){const p=controls[i],d=deflections[i];let distance=Infinity;if(touch.point)for(const j of[i-1,Math.min(i,controls.length-2)]){const a=undisturbed[j],b=undisturbed[j+1],dx=b.x-a.x,dy=b.y-a.y,q=Math.max(0,Math.min(1,((touch.point.x-a.x)*dx+(touch.point.y-a.y)*dy)/(dx*dx+dy*dy||1)));distance=Math.min(distance,Math.hypot(a.x+q*dx-touch.point.x,a.y+q*dy-touch.point.y))}const falloff=Math.exp(-distance*distance/.0121)*touch.strength,freedom=(i-1)/(controls.length-2);const targetX=touch.direction.x*.014*falloff*freedom,targetY=touch.direction.y*.014*falloff*freedom;let remaining=Math.min(dt,.04);while(remaining>0){const h=Math.min(.008,remaining);d.vx+=(320*(targetX-d.x)-29*d.vx)*h;d.vy+=(320*(targetY-d.y)-29*d.vy)*h;d.x+=d.vx*h;d.y+=d.vy*h;remaining-=h}if(touch.strength===0&&Math.hypot(d.x,d.y,d.vx,d.vy)<.00005)d.x=d.y=d.vx=d.vy=0;p.x+=d.x;p.y+=d.y;}
   const p=new THREE.Vector3(),tangent=new THREE.Vector3();for(let i=0;i<=segments;i++){const u=i/segments;curve.getPoint(u,p);curve.getTangent(u,tangent);const nx=-tangent.y,ny=tangent.x,norm=Math.hypot(nx,ny)||1,radius=.0085*(1-.68*Math.pow(u,7));for(let j=0;j<=sides;j++){const a=j/sides*Math.PI*2,k=(i*(sides+1)+j)*3;positions[k]=p.x+nx/norm*Math.cos(a)*radius;positions[k+1]=p.y+ny/norm*Math.cos(a)*radius;positions[k+2]=p.z+Math.sin(a)*radius}}
   geometry.attributes.position.needsUpdate=true;
  }
@@ -39,5 +43,5 @@ export function addMaterialDetails(assembly,surface,R,initialAngle){
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
  const chalkGeometry=new THREE.PlaneGeometry(R*2,R*2,96,96),pos=chalkGeometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setZ(i,surface(pos.getX(i),pos.getY(i))+.0045);chalkGeometry.computeVertexNormals();
  const chalk=new THREE.Mesh(chalkGeometry,new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.78,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1}));chalk.renderOrder=1;assembly.add(chalk);
- return{update,setThreadVisible(visible){thread.visible=visible},reset(angle){motion.angle=angle;motion.velocity=0;update(angle,0)}};
+ return{update,chalkMaterial:chalk.material,setInteraction(point,direction,strength,clear=false){touch.point=point;touch.direction.copy(direction);touch.strength=strength;if(clear)for(const d of deflections)d.x=d.y=d.vx=d.vy=0},setThreadVisible(visible){thread.visible=visible},reset(angle){motion.angle=angle;motion.velocity=0;update(angle,0)}};
 }
