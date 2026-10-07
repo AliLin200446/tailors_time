@@ -1,3 +1,4 @@
+import {addThreadStart} from './start-thread.js';
 import {addAtelierDesk} from './atelier-desk.js';
 import {createAudioStart} from './audio-start.js';
 import * as THREE from './vendor/three.module.js';
@@ -73,17 +74,19 @@ host.addEventListener('pointermove',e=>{if(!reduce)pointer.set(e.clientX/innerWi
 // Fit the complete felt boundary, including its edge fibers, with 10px clearance.
 feltGeometry.computeBoundingSphere();
 const framingDiameter=2*(feltGeometry.boundingSphere.radius+.016);
+let threadStart;
 const atelierDesk=addAtelierDesk({scene,camera,host,radius:R});
-function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,available=Math.max(1,Math.min(w-20,h-20)),vertical=framingDiameter*h/available;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix();atelierDesk.layout()}new ResizeObserver(resize).observe(host);resize();
+function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,available=Math.max(1,Math.min(w-20,h-20)),vertical=framingDiameter*h/available;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix();atelierDesk.layout();threadStart?.layout()}new ResizeObserver(resize).observe(host);resize();
 // The first viewport gesture wakes one shared context before starting the mechanism.
 let audioContext,noiseBuffer;
 const audioStart=createAudioStart({
  createContext:()=>new (window.AudioContext||window.webkitAudioContext)(),
  prepare:context=>{audioContext=context;noiseBuffer=context.createBuffer(1,Math.ceil(context.sampleRate*.04),context.sampleRate);const data=noiseBuffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.exp(-i/(context.sampleRate*.006));},
- onStart:()=>{prev=performance.now();temporal.start();},
+ onStart:()=>{prev=performance.now();threadStart.activate();playTick(.65);temporal.start();},
  onFailure:()=>{if(['localhost','127.0.0.1','[::1]'].includes(location.hostname))console.warn('Clock audio unavailable; continuing visually.');}
 });
-for(const event of ['pointerdown','click','touchstart'])window.addEventListener(event,audioStart.wake,{passive:true,capture:true});
+threadStart=addThreadStart({desk:atelierDesk,wake:audioStart.wake,unlock:audioStart.unlock});
+for(const event of ['pointerdown','click','touchstart'])window.addEventListener(event,e=>{if(!threadStart.contains(e.target))audioStart.wake()},{passive:true,capture:true});
 function playTick(volume=1){if(!audioStart.audible||document.hidden)return;const t=audioContext.currentTime,noise=audioContext.createBufferSource(),filter=audioContext.createBiquadFilter(),gain=audioContext.createGain(),metal=audioContext.createOscillator(),metalGain=audioContext.createGain();noise.buffer=noiseBuffer;filter.type='bandpass';filter.frequency.value=1900;filter.Q.value=.65;gain.gain.setValueAtTime(.048*volume,t);gain.gain.exponentialRampToValueAtTime(.0001,t+.036);noise.connect(filter).connect(gain).connect(audioContext.destination);metal.type='sine';metal.frequency.setValueAtTime(3300,t);metal.frequency.exponentialRampToValueAtTime(2200,t+.024);metalGain.gain.setValueAtTime(.008*volume,t);metalGain.gain.exponentialRampToValueAtTime(.0001,t+.027);metal.connect(metalGain).connect(audioContext.destination);noise.start(t);metal.start(t);noise.stop(t+.04);metal.stop(t+.034);noise.onended=()=>{noise.disconnect();filter.disconnect();gain.disconnect()};metal.onended=()=>{metal.disconnect();metalGain.disconnect()}}
 function playSnip(){if(!audioStart.audible||document.hidden)return;const t=audioContext.currentTime;for(const [delay,frequency,volume]of[[0,1150,.03],[.021,2600,.017]]){const source=audioContext.createBufferSource(),filter=audioContext.createBiquadFilter(),gain=audioContext.createGain();source.buffer=noiseBuffer;filter.type='highpass';filter.frequency.value=frequency;gain.gain.setValueAtTime(volume,t+delay);gain.gain.exponentialRampToValueAtTime(.0001,t+delay+.031);source.connect(filter).connect(gain).connect(audioContext.destination);source.start(t+delay);source.stop(t+delay+.038);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect()}}}
 const materialDetails=addMaterialDetails(assembly,surface,R,tickAngle(Math.floor(Date.now()/1000),80));
@@ -95,8 +98,6 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){audioConte
 function animate(now){requestAnimationFrame(animate);if(document.hidden){prev=now;return}const dt=Math.min((now-prev)/1000,.04);prev=now;const ms=Date.now(),second=Math.floor(ms/1000),a=timeAngles(ms);
  // Freeze an unfinished intro if the browser interrupts audio.
  const running=(temporal.active||audioStart.canAdvance)?temporal.update(dt,a):false;
- const waiting=!audioStart.canAdvance&&!temporal.active,phase=now%2000;
- slit.rotation.z=.4+(waiting&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&phase<180?.012*Math.sin(phase/180*Math.PI)*Math.exp(-phase/100):0);
 materialResponse.update(dt,now,running);
  if(running){if(!activated){activated=true;tickSecond=second;tickStart=-Infinity;lastSecond=Math.floor(ms/60000)*60;}
  const adjacent=second===tickSecond+1,changed=second!==tickSecond;if(changed){tickSecond=second;tickStart=adjacent?now:-Infinity;if(adjacent&&second%60!==0)playTick();}

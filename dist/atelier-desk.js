@@ -7,6 +7,7 @@ export function addAtelierDesk({scene,camera,host,radius}){
  const steel=new THREE.MeshStandardMaterial({color:0x98968a,roughness:.78,metalness:.28,vertexColors:true});
  const threadMaterial=new THREE.MeshStandardMaterial({color:0x932b19,roughness:1});
  const shadowMaterial=new THREE.MeshBasicMaterial({color:0x433c2c,transparent:true,opacity:.045,depthWrite:false});
+ let invitation=true,invitationHover=false,dragX=0,dragY=0,tugAt=-Infinity,pull=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  const add=(geometry,material,parent)=>{const m=new THREE.Mesh(geometry,material);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m};
  function contact(parent,x,y,sx,sy){const m=add(new THREE.CircleGeometry(1,32),shadowMaterial,parent);m.castShadow=false;m.position.set(x,y,floor+.001);m.scale.set(sx,sy,1);return m}
@@ -16,6 +17,7 @@ export function addAtelierDesk({scene,camera,host,radius}){
  const thread=lineTube(points,.003,threadMaterial,loose);
  const threadBase=thread.geometry.attributes.position.array.slice();
  const threadShadow=lineTube(points.map(([x,y])=>[x+.008,y-.011,.0015]),.004,shadowMaterial,loose);threadShadow.castShadow=false;
+ const shadowBase=threadShadow.geometry.attributes.position.array.slice();
 
  // The thimble shell itself carries the recessed dimples, including its closed crown.
  const thimble=new THREE.Group();desk.add(thimble);
@@ -75,7 +77,7 @@ export function addAtelierDesk({scene,camera,host,radius}){
   offcut.visible=outside(offcut.position.x+.10,offcut.position.y,.15);
  }
  const cursor=new THREE.Vector2(),ray=new THREE.Raycaster(),hit=new THREE.Vector3(),plane=new THREE.Plane(new THREE.Vector3(0,0,1),-floor);
- let dirty=false,inside=false,lastMove=-Infinity,bend=0,previousBend=0,velocity=0,highlight=0;
+ let dirty=false,inside=false,lastMove=-Infinity,bend=0,velocity=0,highlight=0;
  host.addEventListener('pointermove',e=>{const b=host.getBoundingClientRect();cursor.set((e.clientX-b.left)/b.width*2-1,1-(e.clientY-b.top)/b.height*2);inside=true;dirty=true;lastMove=performance.now()},{passive:true});
  const leave=()=>{inside=false;dirty=false};host.addEventListener('pointerleave',leave);host.addEventListener('pointercancel',leave);host.addEventListener('pointerup',e=>{if(e.pointerType==='touch')leave()},{passive:true});window.addEventListener('blur',leave);
  function update(dt,now){
@@ -87,9 +89,25 @@ export function addAtelierDesk({scene,camera,host,radius}){
   }
   for(let remaining=Math.min(dt,.04);remaining>0;){const h=Math.min(remaining,.008);velocity+=(target-bend)*230*h-velocity*27*h;bend+=velocity*h;remaining-=h}
   if(reduced.matches||(target===0&&Math.abs(bend)<.00001&&Math.abs(velocity)<.0001)){bend=0;velocity=0}
-  const a=thread.geometry.attributes.position.array;
-  if(bend!==previousBend){for(let i=0;i<a.length;i+=3){const f=Math.max(0,Math.min(1,(threadBase[i]+.65)/1.33));a[i+1]=threadBase[i+1]+bend*Math.sin(f*Math.PI);a[i+2]=threadBase[i+2]+bend*.15*Math.sin(f*Math.PI)}thread.geometry.attributes.position.needsUpdate=true;previousBend=bend}
+  const rect=host.getBoundingClientRect(),pixel=(camera.right-camera.left)/rect.width;
+  const cycle=now%3300,idle=invitation&&cycle<360?3*Math.sin(cycle/360*Math.PI)**2:0;
+  const elapsed=now-tugAt,tug=elapsed>=0&&elapsed<650?18*Math.sin(Math.min(1,elapsed/100)*Math.PI/2)*Math.exp(-Math.max(0,elapsed-100)/120):0;
+  const targetPull=reduced.matches?0:(invitationHover&&invitation?4:idle)+tug;
+  pull+=(targetPull-pull)*Math.min(1,dt*20);if(targetPull===0&&pull<.001)pull=0;
+  const toward=new THREE.Vector2(-loose.position.x-.68,-loose.position.y-.055).normalize();
+  const xPull=directionValue(toward.x*pull+ (invitation?dragX:0)),yPull=directionValue(toward.y*pull-(invitation?dragY:0));
+  function directionValue(value){return reduced.matches?0:value*pixel}
+  const a=thread.geometry.attributes.position.array,shadow=threadShadow.geometry.attributes.position.array;
+  for(let i=0;i<a.length;i+=3){const f=Math.max(0,Math.min(1,(threadBase[i]+.65)/1.33)),weight=f**1.7,wave=bend*Math.sin(f*Math.PI);
+   a[i]=threadBase[i]+xPull*weight;a[i+1]=threadBase[i+1]+wave+yPull*weight;a[i+2]=threadBase[i+2]+wave*.15;
+   shadow[i]=shadowBase[i]+xPull*weight;shadow[i+1]=shadowBase[i+1]+wave+yPull*weight;
+  }
+  thread.geometry.attributes.position.needsUpdate=true;threadShadow.geometry.attributes.position.needsUpdate=true;
   highlight+=(shine-highlight)*Math.min(1,dt*12);if(shine===0&&highlight<.0001)highlight=0;steel.roughness=.78-.025*highlight;
  }
- return{layout,update,desk};
+ return{layout,update,desk,
+  invite({hover=false,x=0,y=0}){if(invitation){invitationHover=hover;dragX=x;dragY=y}},
+  activateInvitation(){if(!invitation)return;invitation=false;invitationHover=false;dragX=dragY=0;tugAt=performance.now()},
+  invitationAnchor(){const rect=host.getBoundingClientRect();const project=(x,y)=>({x:(x-camera.left)/(camera.right-camera.left)*rect.width,y:(camera.top-y)/(camera.top-camera.bottom)*rect.height});return{end:project(loose.position.x+.68,loose.position.y+.055),top:project(0,loose.position.y+.23).y}}
+ };
 }

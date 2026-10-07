@@ -20,3 +20,13 @@ for(const mode of ['constructor','prepare','resume']){
  await failed.wake();await failed.wake();assert.equal(fallback,1);assert.equal(warnings,1);assert.equal(failed.canAdvance,true);assert.equal(failed.audible,false);
 }
 console.log('PASS: gesture gate, shared context, concurrent gestures, resume, no replay, visual fallback.');
+// A pointer press can unlock sound without starting; a short pull or release commits it.
+let pullStarts=0;const pullContext=new Context();
+const pullGate=createAudioStart({createContext:()=>pullContext,prepare:()=>{},onStart:()=>pullStarts++});
+const unlocking=pullGate.unlock();pullContext.run();await unlocking;
+assert.equal(pullGate.audible,true);assert.equal(pullStarts,0);
+await pullGate.wake();assert.equal(pullStarts,1);await pullGate.wake();assert.equal(pullStarts,1);
+let failedPullStarts=0;
+const failedPull=createAudioStart({createContext:()=>{throw Error()},prepare:()=>{},onStart:()=>failedPullStarts++});
+await failedPull.unlock();assert.equal(failedPullStarts,0);await failedPull.wake();assert.equal(failedPullStarts,1);
+console.log('PASS: pull unlock is separate from opening; release starts once, including audio failure.');
