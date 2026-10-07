@@ -22,8 +22,38 @@ const fibers=[],colors=[];const fiberColor=new THREE.Color();for(let i=0;i<74000
 const steel=new THREE.MeshStandardMaterial({color:0x363b39,metalness:.82,roughness:.37});const edge=new THREE.MeshStandardMaterial({color:0x92958e,metalness:.8,roughness:.3});const black=new THREE.MeshStandardMaterial({color:0x222723,metalness:.65,roughness:.43});
 function mesh(geo,mat,parent=assembly){const m=new THREE.Mesh(geo,mat);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
 function rod(a,b,r,mat,parent=assembly){const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b),delta=bv.clone().sub(av);const m=mesh(new THREE.CylinderGeometry(r,r,delta.length(),10),mat,parent);m.position.copy(av.add(bv).multiplyScalar(.5));m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return m}
+// A cloth ribbon with a full sixty-division scale. UVs run along its length.
+const tapeCanvas=document.createElement('canvas');tapeCanvas.width=4096;tapeCanvas.height=192;
+const tc=tapeCanvas.getContext('2d');tc.fillStyle='#c3b48e';tc.fillRect(0,0,4096,192);
+// The weave and the ink share the same surface, rather than floating over it.
+for(let y=0;y<192;y+=3){tc.strokeStyle=y%6?'rgba(74,60,36,.09)':'rgba(255,246,205,.18)';tc.lineWidth=1;tc.beginPath();tc.moveTo(0,y);tc.lineTo(4096,y);tc.stroke()}
+for(let x=0;x<4096;x+=3){tc.strokeStyle=x%6?'rgba(82,63,39,.11)':'rgba(255,247,213,.13)';tc.fillRect(x,0,1,192)}
+for(let i=0;i<60;i++){const x=i*4096/60,major=i%5===0;tc.fillStyle=major?'#37372d':'#49473a';const length=major?98:(i%2===0?65:43);tc.fillRect(x-1.5,9,major?4:2.3,length);if(i%10===5){tc.save();tc.translate(x+18,135);tc.fillStyle=i===25?'#a0422b':'#484536';tc.font='28px monospace';tc.fillText(String(100+i),0,0);tc.restore()}}
+// Fine abrasion breaks up the printed ink and cloth edges.
+for(let i=0;i<16000;i++){tc.fillStyle=rand()<.5?'rgba(235,221,178,.20)':'rgba(76,59,36,.07)';tc.fillRect(rand()*4096,rand()*192,.5+rand()*2,.5+rand()*2)}
+tc.fillStyle='rgba(91,73,43,.16)';tc.fillRect(0,0,4096,2);tc.fillRect(0,190,4096,2);
+const tapeTexture=new THREE.CanvasTexture(tapeCanvas);tapeTexture.colorSpace=THREE.SRGBColorSpace;tapeTexture.wrapS=THREE.RepeatWrapping;tapeTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+const tapeMaterial=new THREE.MeshStandardMaterial({map:tapeTexture,bumpMap:tapeTexture,bumpScale:.002,roughness:.96,metalness:0,side:THREE.DoubleSide});
+const tapeRadius=2.205,tapeWidth=.176,tau=Math.PI*2;
+function tapePoint(a,v){const between=Math.pow(Math.sin(a*6),2);const center=tapeRadius+.009*Math.sin(a*3)+.004*Math.sin(a*11);const width=tapeWidth*(1+.035*Math.sin(a*7));const r=center+(v-.5)*width;const base=.382*Math.sqrt(Math.max(0,1-r*r/(radius*radius)));const lift=.011+between*(.013+.006*Math.sin(a*5));const curl=Math.pow(Math.abs(v-.5)*2,4)*between*(.005+.004*Math.sin(a*9));return new THREE.Vector3(Math.sin(a)*r,Math.cos(a)*r,base+lift+curl)}
+function ribbonGeometry(start,end,segments,offset=0){const points=[],uv=[],indices=[];const across=8;for(let i=0;i<=segments;i++){const a=start+(end-start)*i/segments;for(let j=0;j<=across;j++){const v=j/across,p=tapePoint(a,v);points.push(p.x,p.y,p.z+offset);uv.push(a/tau,v)}}for(let i=0;i<segments;i++)for(let j=0;j<across;j++){const k=i*(across+1)+j;indices.push(k,k+1,k+across+1,k+1,k+across+2,k+across+1)}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();return g}
+const tape=mesh(ribbonGeometry(0,tau,720),tapeMaterial);tape.name='Measuring tape — 60 divisions';
+// Exposed cloth thickness along both edges, with tiny loose woven filaments.
+const fray=[];for(const v of [0,1]){const p=[],ix=[];for(let i=0;i<=720;i++){const a=i/720*tau,q=tapePoint(a,v);p.push(q.x,q.y,q.z,q.x,q.y,q.z-.006);if(i<720){const k=i*2;ix.push(k,k+1,k+2,k+1,k+3,k+2)}if(i%2===0){const r=(rand()-.5)*.012;fray.push(q.x,q.y,q.z,q.x+Math.sin(a)*r,q.y+Math.cos(a)*r,q.z+rand()*.004)}}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setIndex(ix);g.computeVertexNormals();mesh(g,new THREE.MeshStandardMaterial({color:0xad9d79,roughness:1,side:THREE.DoubleSide}))}
+const frayGeo=new THREE.BufferGeometry();frayGeo.setAttribute('position',new THREE.Float32BufferAttribute(fray,3));assembly.add(new THREE.LineSegments(frayGeo,new THREE.LineBasicMaterial({color:0xcbbd99,transparent:true,opacity:.48})));
+// A short overlapping end makes the ribbon's physical construction visible.
+mesh(ribbonGeometry(-.028,.024,16,.006),tapeMaterial);
 const pinColors=[0x8f2117,0xd4b557,0xe5dbc0,0x20251f,0x973025,0xd8ccab,0xeee2c7,0x293a2c,0xc3a352,0x485341,0xd1c5a0,0x252b25];
-for(let i=0;i<12;i++){let a=i*Math.PI/6+(rand()-.5)*.014;let r=2.30+(rand()-.5)*.035;let x=Math.sin(a),y=Math.cos(a);rod([x*1.98,y*1.98,.27],[x*r,y*r,.48],.009,edge);let head=mesh(new THREE.SphereGeometry(.050+rand()*.008,20,16),new THREE.MeshStandardMaterial({color:pinColors[i],roughness:.32,metalness:.12}));head.position.set(x*r,y*r,.48);let hole=mesh(new THREE.CircleGeometry(.033,18),new THREE.MeshBasicMaterial({color:0x501a13,transparent:true,opacity:.45}));hole.position.set(x*1.98,y*1.98,.258);}
+for(let i=0;i<12;i++){
+  // The shaft crosses the cloth exactly on every fifth printed division.
+  const a=i*Math.PI/6,pierce=tapePoint(a,.48),radial=new THREE.Vector3(Math.sin(a),Math.cos(a),0);
+  const head= pierce.clone().addScaledVector(radial,.12+(rand()-.5)*.018);head.z=.47+(rand()-.5)*.025;
+  const tip=pierce.clone().add(pierce.clone().sub(head).multiplyScalar(.28));
+  rod(tip.toArray(),head.toArray(),.009,edge);
+  const ball=mesh(new THREE.SphereGeometry(.05+rand()*.008,20,16),new THREE.MeshStandardMaterial({color:pinColors[i],roughness:.32,metalness:.12}));ball.position.copy(head);
+  const hole=mesh(new THREE.CircleGeometry(.018,18),new THREE.MeshBasicMaterial({color:0x5a4932,transparent:true,opacity:.55,depthWrite:false}));hole.position.copy(pierce);hole.position.z+=.0015;
+  const crease=mesh(new THREE.RingGeometry(.018,.031,20),new THREE.MeshBasicMaterial({color:0x786447,transparent:true,opacity:.12,depthWrite:false}));crease.position.copy(hole.position);crease.scale.y=.7;
+}
 function bladeShape(length,width,side){const s=new THREE.Shape();s.moveTo(-.075,-.18);s.bezierCurveTo(-width,.32,-width*.54,length*.77,-.023,length);s.quadraticCurveTo(.07,length*.65,.105,.38);s.lineTo(.13,-.16);s.quadraticCurveTo(.3*side,-.65,.26*side,-.91);s.lineTo(.07*side,-1.04);s.quadraticCurveTo(-.08*side,-.59,-.075,-.18);return s}
 function loopShape(side){const s=new THREE.Shape();s.absellipse(side*.23,-1.25,.32,.49,-Math.PI/2,Math.PI*1.5,false,side*-.24);const h=new THREE.Path();h.absellipse(side*.23,-1.25,.227,.37,-Math.PI/2,Math.PI*1.5,true,side*-.24);s.holes.push(h);return s}
 const ghostMat=new THREE.MeshBasicMaterial({color:0xed6037,transparent:true,opacity:.14,depthWrite:false});
