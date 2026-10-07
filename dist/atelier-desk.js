@@ -48,16 +48,42 @@ export function addAtelierDesk({scene,camera,host,radius}){
  const scratches=[];for(let i=0;i<18;i++){const a=i*2.399,z=.035+(i%7)*.019,r=.104-z*.083;for(const da of [0,.05+(i%3)*.025])scratches.push(Math.cos(a+da)*r,Math.sin(a+da)*r,z+da*.007)}
  const scratchGeometry=new THREE.BufferGeometry();scratchGeometry.setAttribute('position',new THREE.Float32BufferAttribute(scratches,3));metal.add(new THREE.LineSegments(scratchGeometry,new THREE.LineBasicMaterial({color:0xd2c5a5,transparent:true,opacity:.15})));
  // Ground the tilted shell's lowest point exactly on the desktop.
- metal.scale.setScalar(2.2);metal.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(metal,true);metal.position.z=floor-bounds.min.z+.001;
- contact(thimble,.055,-.081,.257,.180);
+ metal.scale.setScalar(1.65);metal.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(metal,true);metal.position.z=floor-bounds.min.z+.001;
+ contact(thimble,.041,-.061,.193,.135);
 
  const pinSteel=plainSteel.clone();
  const pin=new THREE.Group();desk.add(pin);
  const shaft=add(new THREE.CylinderGeometry(.001,.006,.594,8),pinSteel,pin);shaft.rotation.z=.38;shaft.position.z=floor+.007;
  const head=add(new THREE.SphereGeometry(.017,12,8),new THREE.MeshStandardMaterial({color:0x24241d,roughness:.9}),pin);head.position.set(-Math.sin(.38)*.297,Math.cos(.38)*.297,floor+.012);
  const pinShadow=add(new THREE.PlaneGeometry(.012,.594),shadowMaterial,pin);pinShadow.rotation.z=.38;pinShadow.position.set(.005,-.007,floor+.001);pinShadow.castShadow=false;
- const offcut=new THREE.Group();desk.add(offcut);
- lineTube([[0,0,.005],[.035,.012,.009],[.063,.002,.005],[.093,-.017,.004]],.002,new THREE.MeshStandardMaterial({color:0xb99b78,roughness:1}),offcut);
+
+ // Two fixed, imperfectly wound spools. Their axes lie on the desktop.
+ function spool(color,length,angle){
+  const group=new THREE.Group(),body=new THREE.Group();group.add(body);desk.add(group);body.rotation.z=angle;
+  const yarn=new THREE.MeshStandardMaterial({color,roughness:1});
+  const core=new THREE.MeshStandardMaterial({color:0xb99b78,roughness:.94});
+  const barrel=add(new THREE.CylinderGeometry(.117,.121,length,48),yarn,body);barrel.rotation.z=Math.PI/2;barrel.position.z=floor+.139;
+  const axle=add(new THREE.CylinderGeometry(.048,.048,length+.09,20),core,body);axle.rotation.z=Math.PI/2;axle.position.z=floor+.139;
+  for(const side of [-1,1]){
+   const rim=add(new THREE.TorusGeometry(.125,.009,8,48),core,body);rim.rotation.y=Math.PI/2;rim.position.set(side*(length/2+.025),0,floor+.139);
+   const shape=new THREE.Shape();shape.absarc(0,0,.13,0,Math.PI*2,false);const hole=new THREE.Path();hole.absarc(0,0,.047,0,Math.PI*2,true);shape.holes.push(hole);
+   const flange=add(new THREE.ExtrudeGeometry(shape,{depth:.012,bevelEnabled:false,curveSegments:32}),core,body);flange.rotation.y=Math.PI/2;flange.position.set(side*(length/2+.022),0,floor+.139);
+  }
+  const coil=[];for(let i=0;i<=2304;i++){const t=i/2304,a=t*Math.PI*2*96,r=.121+.0023*Math.sin(a*.071)+.0015*Math.sin(a*.31);coil.push(new THREE.Vector3((t-.5)*length,Math.cos(a)*r,floor+.139+Math.sin(a)*r))}
+  const fiber=new THREE.MeshStandardMaterial({color,roughness:1});fiber.color.multiplyScalar(1.09);
+  add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil),2304,.0024,4,false),fiber,body);
+  const shade=contact(body,.027,-.038,length*.56,.10);shade.rotation.z=0;
+  return group;
+ }
+ const leftSpool=spool(0x932b19,.55,.13),rightSpool=spool(0xd2c5a5,.43,-.79);
+ function loosePin(angle,length,color){
+  const group=new THREE.Group();desk.add(group);group.rotation.z=angle;
+  const shaft=add(new THREE.CylinderGeometry(.0005,.004,length,10),pinSteel,group);shaft.position.z=floor+.016;
+  const ball=add(new THREE.SphereGeometry(.019,12,8),new THREE.MeshStandardMaterial({color,roughness:.8}),group);ball.position.set(0,-length/2,floor+.020);
+  const shadow=add(new THREE.PlaneGeometry(.007,length),shadowMaterial,group);shadow.position.set(.005,-.007,floor+.001);shadow.castShadow=false;
+  return group;
+ }
+ const crossingPin=loosePin(1.17,.64,0x24241d),nearSpoolPin=loosePin(-.61,.48,0xb92717);
 
  function outside(x,y,padding){return Math.hypot(x,y)>radius+padding}
  let anchor={x:0,y:0},threadSpan=1,threadTop=0;
@@ -70,6 +96,10 @@ export function addAtelierDesk({scene,camera,host,radius}){
   const loop=Math.min(1.45,threadSpan*.62),v=Math.min(.68,loop*.50);
   points=[[0,-.07,.007],[.25,-.11,.006],[loop*.48,-.08,.008],[loop*.78,.12,.011],[loop*.80,v,.013],[loop*.48,v*.92,.012],[loop*.40,v*.42,.010],[loop*.66,.02,.007],[loop*.96,-.06,.006],[loop*1.08,.07,.008],[loop*1.22,.015,.005],[threadSpan*.85,-.02,.004],[threadSpan,0,.004]];
   loose.position.set(start,y,floor);
+  // The feed meets the winding at the cropped spool's lower tangent.
+  leftSpool.position.set(left+.12,y+.038,0);
+  points[0]=[leftSpool.position.x-start,.038,.021];
+  points.splice(1,0,[-.10,-.15,.007]);
   const path=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)),false,'centripetal');
   thread.geometry.dispose();thread.geometry=new THREE.TubeGeometry(path,120,.0042,5,false);threadBase=thread.geometry.attributes.position.array.slice();
   const shadowPath=new THREE.CatmullRomCurve3(points.map(([x,y])=>new THREE.Vector3(x+.008,y-.011,.0015)),false,'centripetal');
@@ -79,10 +109,12 @@ export function addAtelierDesk({scene,camera,host,radius}){
   thimble.position.set(tx,ty,0);
   // In square views, use the lower-right corner's available diagonal space.
   if(!outside(tx,ty,.55))thimble.position.set(right-.36,bottom+.60,0);
-  pin.position.set(right-.43,bottom+.035,0);
-  offcut.position.set(left+.46,bottom+(top-bottom)*.18,floor);
-  if(!outside(offcut.position.x+.10,offcut.position.y,.15))offcut.position.y=bottom+.13;
-  loose.visible=true;thimble.visible=true;pin.visible=outside(pin.position.x-.13,pin.position.y+.31,.08);offcut.visible=outside(offcut.position.x+.10,offcut.position.y,.15);
+  rightSpool.position.set(thimble.position.x+.24,thimble.position.y-.55,0);
+  pin.position.set(Math.min(right-.28,thimble.position.x+.58),bottom+.035,0);
+  crossingPin.position.set(start+loop*.95,y-.04,0);
+  nearSpoolPin.position.set(left+(y-.90<bottom+.20?1.15:.27),Math.max(bottom+.20,y-.90),0);
+  loose.visible=true;thimble.visible=true;pin.visible=outside(pin.position.x-.13,pin.position.y+.31,.08);
+
  }
  const cursor=new THREE.Vector2(),ray=new THREE.Raycaster(),hit=new THREE.Vector3(),plane=new THREE.Plane(new THREE.Vector3(0,0,1),-floor);
  let dirty=false,inside=false,lastMove=-Infinity,bend=0,velocity=0,highlight=0;
