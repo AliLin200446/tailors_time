@@ -39,5 +39,5 @@ export function addMaterialDetails(assembly,surface,R,initialAngle){
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
  const chalkGeometry=new THREE.PlaneGeometry(R*2,R*2,96,96),pos=chalkGeometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setZ(i,surface(pos.getX(i),pos.getY(i))+.0045);chalkGeometry.computeVertexNormals();
  const chalk=new THREE.Mesh(chalkGeometry,new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.78,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1}));chalk.renderOrder=1;assembly.add(chalk);
- return{update};
+ return{update,setThreadVisible(visible){thread.visible=visible},reset(angle){motion.angle=angle;motion.velocity=0;update(angle,0)}};
 }
