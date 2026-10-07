@@ -1,3 +1,4 @@
+import {addAtelierDesk} from './atelier-desk.js';
 import {createAudioStart} from './audio-start.js';
 import * as THREE from './vendor/three.module.js';
 import {createTapeModel} from './tape-system.js';
@@ -72,7 +73,8 @@ host.addEventListener('pointermove',e=>{if(!reduce)pointer.set(e.clientX/innerWi
 // Fit the complete felt boundary, including its edge fibers, with 10px clearance.
 feltGeometry.computeBoundingSphere();
 const framingDiameter=2*(feltGeometry.boundingSphere.radius+.016);
-function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,available=Math.max(1,Math.min(w-20,h-20)),vertical=framingDiameter*h/available;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(host);resize();
+const atelierDesk=addAtelierDesk({scene,camera,host,radius:R});
+function resize(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h,available=Math.max(1,Math.min(w-20,h-20)),vertical=framingDiameter*h/available;renderer.setSize(w,h);camera.left=-vertical*aspect/2;camera.right=vertical*aspect/2;camera.top=vertical/2;camera.bottom=-vertical/2;camera.updateProjectionMatrix();atelierDesk.layout()}new ResizeObserver(resize).observe(host);resize();
 // The first viewport gesture wakes one shared context before starting the mechanism.
 let audioContext,noiseBuffer;
 const audioStart=createAudioStart({
@@ -101,5 +103,5 @@ materialResponse.update(dt,now,running);
  const elapsed=now-tickStart;needle.rotation.z=tickAngle(tickSecond,elapsed);needle.position.z=.72;materialDetails.update(needle.rotation.z,dt);updateStitches(ms/1000);
  if(changed&&adjacent&&second%60===0)temporal.cut(stitchLayers.get(Math.floor(second/60)-1));
  const angle=(tickSecond%60)*tau/60,x=Math.sin(angle)*stitchRadius,y=Math.cos(angle)*stitchRadius;contact.position.set(x,y,surface(x,y)+.004);contact.material.opacity=elapsed<130?.22*Math.sin(Math.min(1,elapsed/130)*Math.PI):0;contact.scale.setScalar(1+.3*Math.sin(Math.min(1,elapsed/130)*Math.PI));}
- assembly.rotation.y+=(pointer.x*.052-assembly.rotation.y)*Math.min(dt*3,1);assembly.rotation.x+=(-pointer.y*.052-assembly.rotation.x)*Math.min(dt*3,1);renderer.render(scene,camera)}requestAnimationFrame(animate);
+ assembly.rotation.y+=(pointer.x*.052-assembly.rotation.y)*Math.min(dt*3,1);assembly.rotation.x+=(-pointer.y*.052-assembly.rotation.x)*Math.min(dt*3,1);atelierDesk.update(dt,now);renderer.render(scene,camera)}requestAnimationFrame(animate);
 renderer.domElement.addEventListener('webglcontextlost',e=>e.preventDefault());renderer.domElement.addEventListener('webglcontextrestored',()=>location.reload());
